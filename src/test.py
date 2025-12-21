@@ -101,6 +101,7 @@ def get_dcmst(G:nx.Graph,degree_bound) -> tuple[int,nx.Graph]: # O(2^m), m = |E|
 
     m = len(G.edges)
     min_cost = float('inf') # fijamos una cota superior para podas
+    best_tree = None
 
     # probamos todas las combinaciones posibles a escoger del conjunto de aristas
     for k in range(1,m+1):
@@ -113,7 +114,14 @@ def get_dcmst(G:nx.Graph,degree_bound) -> tuple[int,nx.Graph]: # O(2^m), m = |E|
             if actual_cost >= min_cost: continue        # podamos aquellas soluciones que excedan nuestra mejor solución
             if nx.is_tree(T) and ok(degree_bound,T):    # si el costo es potencialmente mejor que el mejor costo obtenido, verificamos que sea un árbol y que se cumpla la restricción de grado 
                 min_cost = get_cost(T)
-    return min_cost,T
+                best_tree = T.copy()  # Guardamos una copia del mejor árbol encontrado
+    
+    if best_tree is None:
+        # Si no se encontró solución, retornamos un grafo vacío
+        best_tree = nx.Graph()
+        best_tree.add_nodes_from(G)
+    
+    return min_cost, best_tree
 
 def dual_method(G:nx.Graph, MST:nx.Graph, degree_bounds):
     for i in list(MST.nodes):

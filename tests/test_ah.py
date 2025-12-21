@@ -6,7 +6,7 @@ import networkx as nx
 # Agregar el directorio src al path para importar módulos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from test import generate_instance, get_cost, ok
+from test import generate_instance, get_cost, ok, get_dcmst
 from ah import AH_Heuristic
 
 
@@ -46,12 +46,23 @@ def test_ah_heuristic(n, edge_prob=0.4, w_min=1, w_max=10, violation_prob=0.4, s
     # Verificar si el MST inicial cumple las restricciones
     initial_feasible = ok(degree_bounds, MST_initial)
     
-    # Ejecutar heurística AH
-    start_time = time.time()
-    cost_ah, T_ah = AH_Heuristic(G, degree_bounds, C_max)
-    end_time = time.time()
+    # Ejecutar fuerza bruta (get_dcmst)
+    print(f"  Ejecutando fuerza bruta...")
+    start_time_brute = time.time()
+    cost_brute, T_brute = get_dcmst(G, degree_bounds)
+    end_time_brute = time.time()
+    execution_time_brute = end_time_brute - start_time_brute
     
-    execution_time = end_time - start_time
+    # Verificar si la solución de fuerza bruta es factible
+    brute_feasible = ok(degree_bounds, T_brute)
+    brute_is_tree = nx.is_tree(T_brute)
+    
+    # Ejecutar heurística AH
+    print(f"  Ejecutando heurística AH...")
+    start_time_ah = time.time()
+    cost_ah, T_ah = AH_Heuristic(G, degree_bounds, C_max)
+    end_time_ah = time.time()
+    execution_time_ah = end_time_ah - start_time_ah
     
     # Verificar si la solución es factible
     is_feasible = ok(degree_bounds, T_ah)
@@ -81,11 +92,15 @@ def test_ah_heuristic(n, edge_prob=0.4, w_min=1, w_max=10, violation_prob=0.4, s
         'C_max': C_max,
         'cost_initial_mst': cost_initial,
         'initial_feasible': initial_feasible,
+        'cost_brute': cost_brute,
+        'execution_time_brute': execution_time_brute,
+        'brute_feasible': brute_feasible,
+        'brute_is_tree': brute_is_tree,
         'cost_ah': cost_ah,
         'is_feasible': is_feasible,
         'is_tree': is_tree,
         'is_connected': is_connected,
-        'execution_time': execution_time,
+        'execution_time_ah': execution_time_ah,
         'violations': violations,
         'degree_stats': degree_stats,
         'seed': seed
@@ -104,9 +119,20 @@ def print_test_results(results):
     print(f"\nMST inicial (sin restricciones):")
     print(f"  - Costo: {results['cost_initial_mst']}")
     print(f"  - Factible: {'Sí' if results['initial_feasible'] else 'No'}")
-    print(f"\nHeurística AH:")
+    
+    print(f"\n{'─'*60}")
+    print(f"FUERZA BRUTA (get_dcmst):")
+    print(f"{'─'*60}")
+    print(f"  - Costo: {results['cost_brute']}")
+    print(f"  - Tiempo de ejecución: {results['execution_time_brute']:.6f} segundos")
+    print(f"  - Es árbol: {'Sí' if results['brute_is_tree'] else 'No'}")
+    print(f"  - Es factible: {'Sí' if results['brute_feasible'] else 'No'}")
+    
+    print(f"\n{'─'*60}")
+    print(f"HEURÍSTICA AH:")
+    print(f"{'─'*60}")
     print(f"  - Costo: {results['cost_ah']}")
-    print(f"  - Tiempo de ejecución: {results['execution_time']:.6f} segundos")
+    print(f"  - Tiempo de ejecución: {results['execution_time_ah']:.6f} segundos")
     print(f"  - Es árbol: {'Sí' if results['is_tree'] else 'No'}")
     print(f"  - Es conexo: {'Sí' if results['is_connected'] else 'No'}")
     print(f"  - Es factible: {'Sí' if results['is_feasible'] else 'No'}")
@@ -118,7 +144,23 @@ def print_test_results(results):
             if stats['violation']:
                 print(f"    - Nodo {node}: grado={stats['degree']}, límite={stats['bound']}")
     
-    print(f"\n  Mejora respecto al MST inicial: {results['cost_initial_mst'] - results['cost_ah']:.2f}")
+    print(f"\n{'─'*60}")
+    print(f"COMPARACIÓN:")
+    print(f"{'─'*60}")
+    if results['cost_brute'] != float('inf'):
+        diferencia_costo = results['cost_ah'] - results['cost_brute']
+        porcentaje_diferencia = (diferencia_costo / results['cost_brute']) * 100 if results['cost_brute'] > 0 else 0
+        print(f"  - Diferencia de costo (AH - Fuerza Bruta): {diferencia_costo:.2f} ({porcentaje_diferencia:+.2f}%)")
+        
+        speedup = results['execution_time_brute'] / results['execution_time_ah'] if results['execution_time_ah'] > 0 else float('inf')
+        print(f"  - Speedup (tiempo fuerza bruta / tiempo AH): {speedup:.2f}x")
+        print(f"  - Mejora respecto al MST inicial:")
+        print(f"    * Fuerza Bruta: {results['cost_initial_mst'] - results['cost_brute']:.2f}")
+        print(f"    * Heurística AH: {results['cost_initial_mst'] - results['cost_ah']:.2f}")
+    else:
+        print(f"  - Fuerza bruta no encontró solución factible")
+        print(f"  - Mejora AH respecto al MST inicial: {results['cost_initial_mst'] - results['cost_ah']:.2f}")
+    
     print(f"{'='*60}\n")
 
 
@@ -142,10 +184,32 @@ def run_multiple_tests(test_configs):
     print("RESUMEN ESTADÍSTICO")
     print(f"{'='*60}")
     print(f"Total de pruebas: {len(all_results)}")
-    print(f"Pruebas factibles: {sum(1 for r in all_results if r['is_feasible'])}")
-    print(f"Pruebas con violaciones: {sum(1 for r in all_results if r['violations'] > 0)}")
-    print(f"\nTiempo promedio: {sum(r['execution_time'] for r in all_results) / len(all_results):.6f} segundos")
-    print(f"Costo promedio: {sum(r['cost_ah'] for r in all_results) / len(all_results):.2f}")
+    
+    # Estadísticas de fuerza bruta
+    brute_results = [r for r in all_results if r['cost_brute'] != float('inf')]
+    print(f"\nFuerza Bruta:")
+    print(f"  - Pruebas con solución: {len(brute_results)}")
+    if brute_results:
+        print(f"  - Tiempo promedio: {sum(r['execution_time_brute'] for r in brute_results) / len(brute_results):.6f} segundos")
+        print(f"  - Costo promedio: {sum(r['cost_brute'] for r in brute_results) / len(brute_results):.2f}")
+        print(f"  - Pruebas factibles: {sum(1 for r in brute_results if r['brute_feasible'])}")
+    
+    # Estadísticas de heurística AH
+    print(f"\nHeurística AH:")
+    print(f"  - Pruebas factibles: {sum(1 for r in all_results if r['is_feasible'])}")
+    print(f"  - Pruebas con violaciones: {sum(1 for r in all_results if r['violations'] > 0)}")
+    print(f"  - Tiempo promedio: {sum(r['execution_time_ah'] for r in all_results) / len(all_results):.6f} segundos")
+    print(f"  - Costo promedio: {sum(r['cost_ah'] for r in all_results) / len(all_results):.2f}")
+    
+    # Comparación
+    if brute_results:
+        avg_speedup = sum(r['execution_time_brute'] / r['execution_time_ah'] for r in brute_results if r['execution_time_ah'] > 0) / len(brute_results)
+        avg_cost_diff = sum(r['cost_ah'] - r['cost_brute'] for r in brute_results) / len(brute_results)
+        avg_cost_diff_pct = sum((r['cost_ah'] - r['cost_brute']) / r['cost_brute'] * 100 for r in brute_results if r['cost_brute'] > 0) / len(brute_results)
+        print(f"\nComparación:")
+        print(f"  - Speedup promedio: {avg_speedup:.2f}x")
+        print(f"  - Diferencia de costo promedio: {avg_cost_diff:.2f} ({avg_cost_diff_pct:+.2f}%)")
+    
     print(f"{'='*60}\n")
 
 
