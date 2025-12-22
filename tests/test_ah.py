@@ -7,7 +7,9 @@ import networkx as nx
 # Agregar el directorio src al path para importar módulos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from test import generate_instance, get_cost, ok, get_dcmst
+from instance_generator import *
+from bruteforce import *
+from utils import *
 from ah import AH_Heuristic
 
 
@@ -53,7 +55,7 @@ def test_ah_heuristic(n, edge_prob=0.4, w_min=1, w_max=10, violation_prob=0.4, s
     cost_initial = get_cost(MST_initial)
     
     # Verificar si el MST inicial cumple las restricciones
-    initial_feasible = ok(degree_bounds, MST_initial)
+    initial_feasible = is_feasable(degree_bounds, MST_initial)
     
     # Ejecutar fuerza bruta para todos los grafos (sin límites de tamaño)
     # El algoritmo de fuerza bruta tiene complejidad O(2^m) y puede ser muy lento para grafos grandes
@@ -64,12 +66,12 @@ def test_ah_heuristic(n, edge_prob=0.4, w_min=1, w_max=10, violation_prob=0.4, s
     start_time_brute = time.time()
     
     try:
-        cost_brute, T_brute = get_dcmst(G, degree_bounds)
+        cost_brute, T_brute = bruteforce(G, degree_bounds)
         end_time_brute = time.time()
         execution_time_brute = end_time_brute - start_time_brute
         
         # Verificar si la solución de fuerza bruta es factible
-        brute_feasible = ok(degree_bounds, T_brute)
+        brute_feasible = is_feasable(degree_bounds, T_brute)
         brute_is_tree = nx.is_tree(T_brute)
         brute_timeout = False
     except KeyboardInterrupt:
@@ -92,7 +94,7 @@ def test_ah_heuristic(n, edge_prob=0.4, w_min=1, w_max=10, violation_prob=0.4, s
     execution_time_ah = end_time_ah - start_time_ah
     
     # Verificar si la solución es factible
-    is_feasible = ok(degree_bounds, T_ah)
+    is_feasible = is_feasable(degree_bounds, T_ah)
     
     # Verificar que T_ah es un árbol
     is_tree = nx.is_tree(T_ah)
