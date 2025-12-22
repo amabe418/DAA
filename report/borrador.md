@@ -313,19 +313,78 @@ La heurística AH se fundamenta en la teoría de intercambios de aristas dentro 
 
 Dado que cada vértice se analiza una sola vez (para un total de $n$ vértices en el árbol) respecto a sus ramas incidentes (que a lo sumo podrían ser $n - 1$ ramas) y se realiza una ordenación de estas con respecto al criterio propuesto, la complejidad final del algoritmo sería de $O(n\log{n})$.
 
+## Kernelización
+
+Dada la complejidad combinatoria del problema DC-MST, resulta conveniente aplicar un **proceso de reducción previa** o *kernelización* sobre el grafo original antes de ejecutar algoritmos exactos o heurísticos. La kernelización permite eliminar aristas y vértices que son **obligatoriamente incluidas o excluidas** en cualquier solución óptima, reduciendo así el tamaño efectivo del problema y acotando el espacio de búsqueda [Ning et al., 2008][3].
+
+### Teoremas fundamentales para la reducción
+
+La kernelización se fundamenta en tres propiedades clave del DC-MST:
+
+**Teorema 1:** Todas las aristas incidentes a los vértices colgantes (grado 1) deben pertenecer al árbol abarcador con restricción de grado $T^*$.  
+
+**Demostración:** Si un vértice colgante $v$ no tiene su arista incidente incluida en $T^*$, el árbol resultante no sería conexo. Por lo tanto, todas estas aristas se incluyen en $T^*$ y se eliminan del grafo original $G$.  
+
+**Teorema 2:** Sea $V_1$ el conjunto de vértices de grado 1 en $G$ y $E_1$ el conjunto de aristas que los conectan entre sí. Ninguna arista de $E_1$ puede pertenecer a $T^*$.  
+
+**Demostración:** Dado que cada vértice en $V_1$ tiene grado máximo 1, si dos de ellos se conectaran mediante una arista de $E_1$, no podrían conectarse a otros vértices del grafo, violando la conectividad de $T^*$.  
+
+**Teorema 3.**: Si $v_k$ es un vértice de grado 2 con vecinos $v_i$ y $v_j$, y no existe ningún camino $p(v_i,v_j)$ en $G$ que no pase por $v_k$, entonces las aristas $\langle v_k,v_i \rangle$ y $\langle v_k,v_j \rangle$ deben incluirse en $T^*$.  
+
+**Demostración:** Excluir alguna de estas aristas provocaría que no exista camino entre $v_i$ y $v_j$, dejando $T^*$ desconectado. Por tanto, ambas aristas son obligatorias.  
+
+### Algoritmo de reducción
+
+Con base en estos teoremas, se define el **algoritmo de kernelización** (*Reduction_DCMST*) como sigue:
+
+**Entrada:** Grafo $G=\langle V,E \rangle$, función de pesos $w$ y cotas de grado $d$.  
+**Salida:** Grafo reducido $\langle G=(V,E) \rangle$ y conjunto parcial $T^*$ de aristas obligatorias.  
+
+1. Aplicar el Teorema 2 para eliminar todas las aristas entre vértices de grado 1.  
+2. Aplicar el Teorema 1 para incluir todas las aristas incidentes a vértices colgantes en $T^*$ y eliminarlas de $G$.  
+3. Aplicar el Teorema 3 para identificar aristas que deben incluirse debido a vértices de grado 2 críticos, añadiéndolas a $T^*$ y eliminándolas de $G$.  
+
+#### Complejidad Temporal
+La **complejidad temporal** de este procedimiento es $O(n^3)$ en el peor caso, siendo $n = |V|$, debido a la necesidad de comprobar caminos para aplicar el Teorema 3. Los pasos 1 y 2 tienen complejidad $O(n^2)$ y $O(n)$, respectivamente.  
+
+### Construcción del árbol abarcador mediante Kruskal modificado
+
+El **grafo reducido** y el conjunto inicial de aristas $T^*$ obtenido mediante kernelización constituyen la entrada para la construcción del árbol abarcador de costo mínimo con restricción de grado, utilizando una versión **modificada del algoritmo de Kruskal** [Ning et al., 2008].  
+
+El procedimiento es el siguiente:
+
+1. Se inicia con el conjunto $T^*$ de aristas obligatorias obtenidas mediante kernelización. Cada vértice mantiene un contador de su grado actual.  
+2. Se ordenan las aristas restantes por peso ascendente.  
+3. Iterativamente, se selecciona la arista de menor costo $e = \langle v_i,v_j \rangle$ que **conecte dos componentes distintas** y cuya inclusión **no viole la restricción de grado** en ninguno de sus extremos:  
+   
+   $$deg_{T^*}(v_i) < b_i \quad \text{y} \quad deg_{T^*}(v_j) < b_j$$
+
+4. Si se cumple la condición, se añade $e$ a $T^*$ y se actualizan los grados de los vértices involucrados. En caso contrario, se descarta $e$ temporalmente.  
+5. Se repite el proceso hasta que $T^*$ contenga $n-1$ aristas, garantizando así la conectividad de todo el grafo.  
+
+De esta manera, la **kernelización y Kruskal modificado** actúan de forma complementaria: la primera reduce el tamaño del problema y asegura la inclusión de aristas críticas, mientras que la segunda construye el árbol abarcador mínimo respetando simultáneamente las restricciones de grado de cada vértice.  
+
+### Referencias
+
+- Ning, A., Ma, L., & Xiong, X. (2008). *A new algorithm for degree-constrained minimum spanning tree based on the reduction technique*. Progress in Natural Science, 18(4), 495–499.  
+
+
 ## Conclusión del Diseño de Soluciones Algorítmicas
 
-En esta sección se han presentado tres enfoques complementarios para abordar el problema del DC-MST.  
+En esta sección se han presentado cuatro enfoques complementarios para abordar el problema del DC-MST.  
 
-1. **Fuerza Bruta**: Se describió un enfoque exhaustivo que permite explorar todas las combinaciones posibles de aristas, garantizando la obtención de la solución óptima. Si bien este método es fundamental para establecer una línea base, su complejidad exponencial limita su aplicabilidad a instancias de pequeño tamaño.
+1. **Kernelización (reducción previa)**: Antes de construir el árbol abarcador, se aplica un procedimiento de kernelización que permite **identificar aristas obligatorias e imposibles** mediante análisis estructural del grafo (aristas incidentes a vértices colgantes, vértices de grado 2 críticos, etc.) [Ning et al., 2008]. Esto reduce significativamente el tamaño del grafo y acota el espacio de búsqueda, mejorando la eficiencia de los algoritmos posteriores. Las aristas incluidas por la kernelización se utilizan como entrada inicial para el algoritmo de Kruskal modificado.  
 
-2. **Heurística CH (Christofides-inspired Heuristic)**: Se presentó un algoritmo constructivo basado en la modificación iterativa de un MST inicial, que garantiza la factibilidad respecto a las restricciones de grado. CH permite generar soluciones de buena calidad en tiempo lineal respecto al número de vértices, siendo particularmente útil como cota superior en esquemas exactos de tipo branch and bound.
+2. **Fuerza Bruta**: Se describió un enfoque exhaustivo que permite explorar todas las combinaciones posibles de aristas, garantizando la obtención de la solución óptima. Si bien este método es fundamental para establecer una línea base, su complejidad exponencial limita su aplicabilidad a instancias de pequeño tamaño.
 
-3. **Heurística AH (Analysis-based Heuristic)**: Se introdujo un enfoque que clasifica las aristas del MST como superfluas o indispensables mediante análisis de intercambios de ramas y cuerdas. AH proporciona una manera sistemática de reducir el espacio de búsqueda y construir soluciones factibles cercanas al óptimo, manteniendo un comportamiento computacional eficiente.
+3. **Heurística CH (Christofides-inspired Heuristic)**: Se presentó un algoritmo constructivo basado en la modificación iterativa de un MST inicial, que garantiza la factibilidad respecto a las restricciones de grado. CH permite generar soluciones de buena calidad en tiempo lineal respecto al número de vértices, siendo particularmente útil como cota superior en esquemas exactos de tipo branch and bound.
 
-Estos enfoques representan un equilibrio entre exactitud y eficiencia: mientras que la fuerza bruta asegura optimalidad, las heurísticas CH y AH permiten abordar instancias de mayor tamaño con soluciones de alta calidad y un costo computacional aceptable.
+4. **Heurística AH (Analysis-based Heuristic)**: Se introdujo un enfoque que clasifica las aristas del MST como superfluas o indispensables mediante análisis de intercambios de ramas y cuerdas. AH proporciona una manera sistemática de reducir el espacio de búsqueda y construir soluciones factibles cercanas al óptimo, manteniendo un comportamiento computacional eficiente.
+
+Estos enfoques representan un equilibrio entre **exactitud y eficiencia**: la kernelización y la fuerza bruta aseguran la optimalidad o acotan el problema de forma segura, mientras que las heurísticas CH y AH permiten abordar instancias de mayor tamaño con soluciones de alta calidad y un costo computacional aceptable.
+
 
 # Referencias
 1. S.C. Narula and  C.  A. Ho, Degree-constrained minimum spanning tree. Comput. Ops Res. 7, 239-249 (1980). 
 2. M. Savelsbergh and T. Volgenant, Edge Exchanges in the Degree-Constrained Minimum Spanning Tree Problem. Comput. Ops Res. 12, 341-348 (1985).
-3. F. D. Glover and D. Klingman, Finding minimum spanning trees with a fixed number of  links at a node, Res. Rep. CS 169, Center for Cybernetics Studies,The University of Texas  at Austin (1974).
+3. Ning, A., Ma, L., & Xiong, X. (2008). *A new algorithm for degree-constrained minimum spanning tree based on the reduction technique*. Progress in Natural Science, 18(4), 495–499.
