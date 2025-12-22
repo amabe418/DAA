@@ -101,7 +101,7 @@ def get_dcmst(G:nx.Graph,degree_bound) -> tuple[int,nx.Graph]: # O(2^m), m = |E|
 
     m = len(G.edges)
     min_cost = float('inf') # fijamos una cota superior para podas
-    best_tree = None
+    best_edges = None  # Guardamos solo las aristas de la mejor solución, no el árbol completo
 
     # probamos todas las combinaciones posibles a escoger del conjunto de aristas
     for k in range(1,m+1):
@@ -113,13 +113,19 @@ def get_dcmst(G:nx.Graph,degree_bound) -> tuple[int,nx.Graph]: # O(2^m), m = |E|
             actual_cost = get_cost(T)                   # obtenemos el costo de aristas del grafo craedo con esta combinación
             if actual_cost >= min_cost: continue        # podamos aquellas soluciones que excedan nuestra mejor solución
             if nx.is_tree(T) and ok(degree_bound,T):    # si el costo es potencialmente mejor que el mejor costo obtenido, verificamos que sea un árbol y que se cumpla la restricción de grado 
-                min_cost = get_cost(T)
-                best_tree = T.copy()  # Guardamos una copia del mejor árbol encontrado
+                min_cost = actual_cost
+                # Guardamos solo las aristas en lugar del árbol completo (más rápido)
+                best_edges = [(u, v, w) for u, v, w in comb]
     
-    if best_tree is None:
+    # Reconstruimos el árbol solo al final, una sola vez
+    if best_edges is None:
         # Si no se encontró solución, retornamos un grafo vacío
         best_tree = nx.Graph()
         best_tree.add_nodes_from(G)
+    else:
+        best_tree = nx.Graph()
+        best_tree.add_nodes_from(G)
+        best_tree.add_weighted_edges_from(best_edges)
     
     return min_cost, best_tree
 

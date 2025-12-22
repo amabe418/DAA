@@ -83,17 +83,17 @@ def find_replacement_edge(T: nx.Graph, e: tuple, G: nx.Graph, degree_bounds: dic
                     # Si se especificó un violador, verificamos que el reemplazo reduzca su grado
                     if violador is not None:
                         # El violador debe ser u o v (uno de los extremos de la arista removida)
-                        # Para que el grado del violador se reduzca, el nuevo extremo en su componente
-                        # NO debe ser el violador mismo
+                        # Para que el grado del violador se reduzca, la nueva arista NO debe tener
+                        # al violador como extremo (porque entonces su grado no cambiaría)
                         if violador == u:
-                            # Si removemos (u, v) y u es el violador, node_u (en comp_u) no debe ser u
-                            # porque si node_u == u, entonces el grado de u no cambia
-                            if node_u == violador:
+                            # Si removemos (u, v) y u es el violador, la nueva arista (node_u, node_v)
+                            # no debe tener a u como extremo. Como u está en comp_u, verificamos node_u
+                            if node_u == violador or node_v == violador:
                                 continue
                         elif violador == v:
-                            # Si removemos (u, v) y v es el violador, node_v (en comp_v) no debe ser v
-                            # porque si node_v == v, entonces el grado de v no cambia
-                            if node_v == violador:
+                            # Si removemos (u, v) y v es el violador, la nueva arista (node_u, node_v)
+                            # no debe tener a v como extremo. Como v está en comp_v, verificamos node_v
+                            if node_u == violador or node_v == violador:
                                 continue
                     
                     # Preferimos la arista de menor costo
@@ -165,10 +165,11 @@ def AH_Heuristic(G: nx.Graph, degree_bounds: dict, C_max: float = None):
                         # Revisar costo total
                         costo_despues = get_cost(T)
                         
-                        # Solo revertir si C_max está definido Y el costo excede significativamente
-                        # Permitimos un pequeño margen para permitir progreso
-                        if C_max is not None and costo_despues > C_max * 1.1:
-                            # Revertir cambio si supera significativamente la cota superior
+                        # Si C_max está definido, NO debemos excederlo nunca
+                        # El objetivo es encontrar un árbol factible con costo menor que C_max
+                        # Si un cambio excede C_max, lo revertimos inmediatamente
+                        if C_max is not None and costo_despues > C_max:
+                            # Revertir cambio si excede la cota superior
                             T.remove_edge(x, y)
                             T.add_weighted_edges_from([(u, v_node, w_e)])
                             cambios_en_iteracion = False
@@ -189,9 +190,35 @@ def AH_Heuristic(G: nx.Graph, degree_bounds: dict, C_max: float = None):
         # Actualizar lista de violadores
         violadores = {v for v in T.nodes() if T.degree(v) > degree_bounds[v]}
         
-        # Si no hay cambios en los violadores Y no hubo cambios en esta iteración, salir
+        # Si no hay cambios en los violadores Y no hubo cambios en esta iteración
+        # Intentar una iteración más con una estrategia diferente: permitir reemplazos
+        # que no reduzcan el grado del violador pero que puedan abrir nuevas posibilidades
         if violadores == violadores_previo and not cambios_en_iteracion:
-            break
+            # Último intento: intentar reemplazos sin la restricción del violador
+            # para ver si podemos encontrar una solución
+            cambios_ultimo_intento = False
+            for v in list(violadores):
+                exceso = select_excess_edges(T, v, degree_bounds[v])
+                for edge_tuple in exceso:
+                    u, v_node, w_e = edge_tuple
+                    e = (u, v_node, w_e)
+                    # Intentar sin pasar el violador para ser menos restrictivo
+                    candidate = find_replacement_edge(T, e, G, degree_bounds, violador=None)
+                    if candidate is not None:
+                        x, y, w_candidate = candidate
+                        grado_antes = T.degree(v)
+                        T.remove_edge(u, v_node)
+                        T.add_weighted_edges_from([(x, y, w_candidate)])
+                        grado_despues = T.degree(v)
+                        # Aceptar si reduce el grado o si no lo aumenta mucho
+                        if grado_despues <= grado_antes:
+                            cambios_ultimo_intento = True
+                            break
+                if cambios_ultimo_intento:
+                    break
+            
+            if not cambios_ultimo_intento:
+                break
     
     # Retornar árbol factible
     costo_final = get_cost(T)

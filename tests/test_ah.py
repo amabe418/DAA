@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import signal
 import networkx as nx
 
 # Agregar el directorio src al path para importar módulos
@@ -8,6 +9,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from test import generate_instance, get_cost, ok, get_dcmst
 from ah import AH_Heuristic
+
+
+class TimeoutError(Exception):
+    pass
+
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Timeout alcanzado")
 
 
 def calculate_c_max(G: nx.Graph):
@@ -46,16 +55,34 @@ def test_ah_heuristic(n, edge_prob=0.4, w_min=1, w_max=10, violation_prob=0.4, s
     # Verificar si el MST inicial cumple las restricciones
     initial_feasible = ok(degree_bounds, MST_initial)
     
-    # Ejecutar fuerza bruta (get_dcmst)
-    print(f"  Ejecutando fuerza bruta...")
-    start_time_brute = time.time()
-    cost_brute, T_brute = get_dcmst(G, degree_bounds)
-    end_time_brute = time.time()
-    execution_time_brute = end_time_brute - start_time_brute
+    # Ejecutar fuerza bruta para todos los grafos (sin límites de tamaño)
+    # El algoritmo de fuerza bruta tiene complejidad O(2^m) y puede ser muy lento para grafos grandes
+    num_edges = len(G.edges())
+    num_nodes = len(G.nodes())
     
-    # Verificar si la solución de fuerza bruta es factible
-    brute_feasible = ok(degree_bounds, T_brute)
-    brute_is_tree = nx.is_tree(T_brute)
+    print(f"  Ejecutando fuerza bruta (grafo: {num_nodes} nodos, {num_edges} aristas - puede tardar mucho tiempo)...")
+    start_time_brute = time.time()
+    
+    try:
+        cost_brute, T_brute = get_dcmst(G, degree_bounds)
+        end_time_brute = time.time()
+        execution_time_brute = end_time_brute - start_time_brute
+        
+        # Verificar si la solución de fuerza bruta es factible
+        brute_feasible = ok(degree_bounds, T_brute)
+        brute_is_tree = nx.is_tree(T_brute)
+        brute_timeout = False
+    except KeyboardInterrupt:
+        # Si el usuario interrumpe manualmente
+        end_time_brute = time.time()
+        execution_time_brute = end_time_brute - start_time_brute
+        cost_brute = float('inf')
+        T_brute = nx.Graph()
+        T_brute.add_nodes_from(G)
+        brute_feasible = False
+        brute_is_tree = False
+        brute_timeout = True
+        print(f"  ⚠️  Fuerza bruta interrumpida por el usuario después de {execution_time_brute:.2f}s")
     
     # Ejecutar heurística AH
     print(f"  Ejecutando heurística AH...")
@@ -103,7 +130,8 @@ def test_ah_heuristic(n, edge_prob=0.4, w_min=1, w_max=10, violation_prob=0.4, s
         'execution_time_ah': execution_time_ah,
         'violations': violations,
         'degree_stats': degree_stats,
-        'seed': seed
+        'seed': seed,
+        'brute_timeout': brute_timeout if 'brute_timeout' in locals() else False
     }
 
 
@@ -123,7 +151,12 @@ def print_test_results(results):
     print(f"\n{'─'*60}")
     print(f"FUERZA BRUTA (get_dcmst):")
     print(f"{'─'*60}")
-    print(f"  - Costo: {results['cost_brute']}")
+    if results.get('brute_timeout', False):
+        print(f"  - ⚠️  Interrumpido por el usuario")
+    if results['cost_brute'] == float('inf'):
+        print(f"  - Sin solución factible encontrada")
+    else:
+        print(f"  - Costo: {results['cost_brute']}")
     print(f"  - Tiempo de ejecución: {results['execution_time_brute']:.6f} segundos")
     print(f"  - Es árbol: {'Sí' if results['brute_is_tree'] else 'No'}")
     print(f"  - Es factible: {'Sí' if results['brute_feasible'] else 'No'}")
@@ -215,12 +248,14 @@ def run_multiple_tests(test_configs):
 
 if __name__ == "__main__":
     # Configuraciones de prueba
+    # Nota: Fuerza bruta solo se ejecuta para grafos pequeños (≤10 nodos, ≤15 aristas)
+    # Para grafos más grandes, solo se ejecuta la heurística AH
     test_configs = [
         {'n': 5, 'edge_prob': 0.4, 'w_min': 1, 'w_max': 10, 'violation_prob': 0.4},
         {'n': 8, 'edge_prob': 0.4, 'w_min': 1, 'w_max': 10, 'violation_prob': 0.4},
-        {'n': 10, 'edge_prob': 0.4, 'w_min': 1, 'w_max': 10, 'violation_prob': 0.4},
-        {'n': 12, 'edge_prob': 0.5, 'w_min': 1, 'w_max': 15, 'violation_prob': 0.5},
-        {'n': 15, 'edge_prob': 0.5, 'w_min': 1, 'w_max': 20, 'violation_prob': 0.5},
+        {'n': 10, 'edge_prob': 0.3, 'w_min': 1, 'w_max': 10, 'violation_prob': 0.4},  # Reducido edge_prob para menos aristas
+        {'n': 12, 'edge_prob': 0.3, 'w_min': 1, 'w_max': 15, 'violation_prob': 0.5},  # Solo AH
+        {'n': 15, 'edge_prob': 0.3, 'w_min': 1, 'w_max': 20, 'violation_prob': 0.5},  # Solo AH
     ]
     
     run_multiple_tests(test_configs)
